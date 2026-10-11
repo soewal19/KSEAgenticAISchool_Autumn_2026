@@ -1,0 +1,22 @@
+# Data, outputs, caches
+air-alerts-forecast/data/raw/*
+air-alerts-forecast/outputs/
+air-alerts-forecast/predictions/
+air-alerts-forecast/figures/
+air-alerts-forecast/runs/
+air-alerts-forecast/smoke/
+air-alerts-forecast/.ruff_cache/
+air-alerts-forecast/0.7.3/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+.pytest_cache/
+.ipynb_checkpoints/

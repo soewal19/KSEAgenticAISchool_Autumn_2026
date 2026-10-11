@@ -1,0 +1,52 @@
+project:
+  name: air-alerts-forecast
+  random_state: 42
+  log_level: INFO
+
+data:
+  source_url: "https://raw.githubusercontent.com/Vadimkin/ukrainian-air-raid-sirens-dataset/main/datasets/official_data_en.csv"
+  raw_path: "data/raw/official_data_en.csv"
+  war_start: "2022-02-24"
+
+regions:
+  target: "Kyiv City"
+  neighbors:
+    - "Kyivska oblast"
+    - "Chernihivska oblast"
+    - "Sumska oblast"
+
+time:
+  freq_minutes: 5
+  horizon_minutes: 30
+  horizons_to_eval:
+    - 15
+    - 30
+    - 60
+
+features:
+  lags_minutes: [1, 5, 15, 30, 60, 180, 1440]
+  rolling_windows:
+    hours_1: 60
+    hours_6: 360
+    hours_24: 1440
+    days_7: 10080
+
+split:
+  train_end: "2023-12-31"
+  val_end: "2024-06-30"
+
+models:
+  - persistence
+  - seasonal
+  - logistic_regression
+  - random_forest
+  - lightgbm
+
+threshold:
+  metric: f1
+  min_recall: 0.70
+
+outputs:
+  figures_dir: "outputs/figures"
+  metrics_dir: "outputs/metrics"
+  predictions_dir: "outputs/predictions"

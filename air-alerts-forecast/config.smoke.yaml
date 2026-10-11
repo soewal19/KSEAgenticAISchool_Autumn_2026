@@ -1,0 +1,43 @@
+project:
+  name: air-alerts-forecast-smoke
+  random_state: 42
+  log_level: WARNING
+
+data:
+  source_url: "https://example.invalid/smoke-fixture-not-downloaded.csv"
+  raw_path: "tests/fixtures/smoke_alerts.csv"
+  war_start: "2022-02-24"
+
+regions:
+  target: "Kyiv City"
+  neighbors:
+    - "Kyivska oblast"
+    - "Chernihivska oblast"
+    - "Sumska oblast"
+
+time:
+  freq_minutes: 5
+  horizon_minutes: 30
+  horizons_to_eval: [15, 30]
+
+features:
+  lags_minutes: [5, 15, 60]
+  rolling_windows:
+    hour_1: 60
+
+split:
+  train_end: "2024-01-05"
+  val_end: "2024-01-09"
+
+models:
+  - persistence
+
+threshold:
+  metric: f1
+  min_recall: 0.70
+
+outputs:
+  figures_dir: "outputs/smoke/figures"
+  metrics_dir: "outputs/metrics"
+  predictions_dir: "outputs/smoke/predictions"
+  metrics_filename: "smoke_metrics.json"
