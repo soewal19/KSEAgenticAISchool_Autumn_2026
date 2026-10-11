@@ -1,6 +1,16 @@
 # Data, outputs, caches
 air-alerts-forecast/data/raw/*
 air-alerts-forecast/outputs/
+!air-alerts-forecast/outputs/
+air-alerts-forecast/outputs/*
+!air-alerts-forecast/outputs/figures/
+air-alerts-forecast/outputs/figures/*
+!air-alerts-forecast/outputs/figures/monthly_activity_Kyiv_City.png
+!air-alerts-forecast/outputs/figures/hourly_activity_Kyiv_City.png
+!air-alerts-forecast/outputs/figures/cross_region_correlation.png
+!air-alerts-forecast/outputs/figures/alert_durations_by_region.png
+!air-alerts-forecast/outputs/figures/calibration_curves.png
+!air-alerts-forecast/outputs/figures/permutation_importance.png
 air-alerts-forecast/predictions/
 air-alerts-forecast/figures/
 air-alerts-forecast/runs/
