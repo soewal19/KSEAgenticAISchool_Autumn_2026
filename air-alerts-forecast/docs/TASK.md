@@ -1,170 +1,48 @@
-# Задание Stage 2 — KSE Agentic Autumn 2026
+# KSE Agentic Autumn 2026 — Stage 2 Assignment Summary
 
-## Официальная формулировка
+This page summarizes the Stage 2 brief for the project. The official application email and submission form remain the authoritative source for deadlines and submission instructions.
 
-> *«Time Series Analysis of Air Raid Alerts in Ukraine»* — мини pet-project на
-> Python, решающий реальную оборонную задачу: анализ временных рядов
-> воздушных тревог в Украине.
+## Assignment
 
-Отборочный этап **KSE Agentic Autumn 2026 (Stage 2)**. Цель отборочной комиссии
-— оценить не столько результат, сколько **процесс**: как кандидат
-взаимодействует с AI как с основным инженерным инструментом, итерируется,
-исправляет ошибки, оспаривает галлюцинации и направляет модель к рабочей
-архитектуре, а не принимает первый вывод вслепую.
+Build a small Python project for time-series analysis of air-raid alerts in Ukraine. The selection process evaluates both the result and the candidate's use of AI as a primary engineering tool: iteration, error correction, skepticism toward hallucinations, and guidance toward a working architecture.
 
----
+## Objective
 
-## 1. Цель задания
+Create a reproducible research pipeline that estimates the probability of a new air-alert onset in a selected Ukrainian region over a short forecast horizon.
 
-Построить **воспроизводимый исследовательский ML-пайплайн**, который
-прогнозирует **вероятность начала новой воздушной тревоги** в выбранном
-регионе Украины на коротком горизонте.
+> This is not an early-warning system. Historical alerts reflect adversary actions and air-defence responses, not a natural cycle. Predictive power may be limited and must be reported honestly.
 
-> **Важно:** это НЕ система раннего предупреждения. Исторические тревоги
-> отражают решения противника и действия ПВО, а не природный цикл. Модель
-> может иметь ограниченную предсказательную силу — это нужно честно показать.
+## Data and evaluation
 
----
+- Source: [Vadimkin's Ukrainian air-raid siren dataset](https://github.com/Vadimkin/ukrainian-air-raid-sirens-dataset), file official_data_en.csv.
+- Use the most recent available data and evaluate on the latest period.
+- Prevent data leakage: neither training data nor model inputs may contain information from after the forecast timestamp.
+- Optional news, official statements, or public-channel content must also have been published before the forecast timestamp.
 
-## 2. Данные и оценка
+## Expected analysis
 
-- **Источник:** открытый исторический датасет украинских воздушных тревог —
-  [Vadimkin/ukrainian-air-raid-sirens-dataset](https://github.com/Vadimkin/ukrainian-air-raid-sirens-dataset),
-  файл `official_data_en.csv`.
-- **Требование:** работать с наиболее свежими данными и оценивать решение на
-  самом позднем периоде.
-- **Критическое правило — отсутствие data leakage:**
-  ничего из того, на чём обучается или что использует модель как вход, не
-  может приходить из момента времени **после** момента прогноза.
+- Main region: Kyiv City. Compare with relevant neighboring regions such as Kyivska, Chernihivska, and Sumska oblasts.
+- Convert interval events to a regular binary series, using a one- or five-minute grid.
+- Predict whether a new alert begins in (t, t + H], with H defaulting to 30 minutes and configurable alternatives of 15 or 60 minutes.
+- Engineer only causal features, including lags, neighboring-region lags, alert duration and recency, rolling onset counts, and calendar variables.
+- Compare baselines with machine-learning models. Select the decision threshold on validation only.
+- Use PR-AUC as the primary metric for the imbalanced target. Also report ROC-AUC, precision, recall, F1, Brier score, calibration, confusion matrix, and baseline lift.
+- Use exploratory plots to answer analytical questions: temporal changes, regional relationships, alert durations, calibration, model diagnostics, and performance degradation.
 
-### Дополнительно (опционально)
+## Engineering expectations
 
-Можно выйти за пределы истории тревог и использовать **текстовые или медиа
-данные** (новости, официальные заявления, публичные Telegram-каналы). То же
-правило: только контент, опубликованный **до** момента прогноза.
+- Python, YAML configuration, fixed random seeds, useful logging, docstrings, and type hints.
+- Reproducible local execution, tests, and clear documentation of limitations.
+- The repository includes pip and Docker workflows. Docker is optional for the researcher and CI uses a small fixed fixture rather than the full historical pipeline.
 
----
+## Submission artifacts
 
-## 3. Научная база
+1. A link to the GitHub repository containing the final working code.
+2. A full text export of the AI conversation.
+3. A plain-text reflection of about 100 words addressing what went wrong, how the approach changed, and why the final version is better than the first attempt.
 
-Опираемся на подход из публикации:
+The brief states a deadline of Monday, 12 October 2026 at 23:59 Kyiv time (EEST). Verify the deadline and form in the original email before submission.
 
-**Pavlyshenko & Pavlyshenko, «Predictive Analytics of Air Alerts in the
-Russian-Ukrainian War», arXiv:2411.14625.**
+## Evaluation emphasis
 
-Ключевые выводы, которые мы переносим в проект:
-
-| Вывод | Импликация для пайплайна |
-|-------|--------------------------|
-| Тревоги в соседних регионах коррелируют | Лаги активности соседей — важные предикторы |
-| Час, день недели, месяц, день от начала войны имеют прогностическую ценность | Календарные и циклические признаки |
-| Паттерны тревог меняются во времени — нестационарны | Хронологический сплит, анализ деградации |
-| Задача = бинарная классификация: начнётся ли тревога в следующем интервале | `y_t = 1` если новая тревога в `(t, t+H]` |
-
----
-
-## 4. Требования к решению
-
-### 4.1 Регионы
-
-- **Основной регион детального анализа:** Kyiv City.
-- **Сравнение минимум с двумя соседними/релевантными:** Kyivska oblast,
-  Chernihivska oblast, Sumska oblast (имена как в датасете).
-
-### 4.2 Временной ряд и target
-
-- Минутный или **5-минутный** бинарный ряд: `1` = тревога активна, `0` = нет.
-- Если исходные данные — интервалы начала/конца, корректно развернуть их в
-  регулярный ряд.
-- **Target:** `y_t = 1`, если в регионе новая тревога начнётся в интервале
-  `(t, t + H]`, где **H = 30 минут** по умолчанию. H — параметр (15, 30, 60).
-
-### 4.3 Признаки (строго из информации, доступной до момента t)
-
-- Лаги активности в целевом регионе: 1, 5, 15, 30, 60 мин, 3 ч, 24 ч.
-- Лаги активности в соседних регионах.
-- Длительность текущей активной тревоги (если идёт).
-- Время с окончания предыдущей тревоги.
-- Rolling counts: число тревог за 1 ч, 6 ч, 24 ч, 7 дней.
-- Календарные признаки: час, день недели, месяц, выходной, день от
-  2022-02-24.
-- Циклическое кодирование часа и дня недели через sin/cos.
-
-### 4.4 No-leakage гарантии (явно проверить и задокументировать)
-
-- Хронологический сплит: train → validation → test, без перемешивания.
-- validation и test — более поздние периоды, чем train.
-- Все rolling/lag-признаки используют только прошлые наблюдения.
-- Scaler, encoder, threshold и любые статистики обучаются только на train.
-- Target не содержит информации из будущего.
-
-### 4.5 Модели
-
-1. **Persistence baseline** — если тревога активна в t, предсказать
-   продолжение; иначе — отсутствие новой.
-2. **Seasonal baseline** — вероятность начала по часу и дню недели, оценённая
-   только на train.
-3. **Logistic Regression.**
-4. **Random Forest.**
-5. **Gradient Boosting** — LightGBM или XGBoost.
-
-### 4.6 Метрики
-
-- **PR-AUC** — основная метрика (сильный дисбаланс классов).
-- ROC-AUC.
-- precision, recall, F1 при пороге, выбранном **только на validation**.
-- Brier score и calibration curve.
-- Confusion matrix.
-- Lift over persistence baseline.
-- Порог: max F1 или recall ≥ 0.70 при минимальном false-positive rate.
-
-### 4.7 EDA и анализ
-
-- Количество и длительность тревог по регионам.
-- Активность по часам, дням недели, месяцам.
-- Корреляция тревог между регионами.
-- Распределение интервалов между тревогами и длительностей тревог.
-- Изменение паттернов по годам.
-- Feature importance / permutation importance.
-- SHAP (если доступна).
-- Примеры правильных и ошибочных прогнозов.
-- Анализ деградации качества по времени.
-- Честное обсуждение ограничений.
-
-### 4.8 Инженерные требования
-
-- Python 3.11+, pandas, numpy, scikit-learn, matplotlib, lightgbm/xgboost.
-- Конфигурация через YAML.
-- Фиксированный `random_state`.
-- Логирование основных шагов.
-- Функции с docstrings и type hints.
-- CLI-команды: `make data`, `make features`, `make train`, `make evaluate`,
-  `make all`.
-- README с методологией, схемой пайплайна, метриками, ограничениями, запуском.
-- Структура репозитория строго по заданию.
-
----
-
-## 5. Требования к сабмиту
-
-1. **Артефакт:** ссылка на GitHub-репозиторий с финальным рабочим кодом.
-2. **AI log:** полный текстовый экспорт истории разговора с выбранным AI-инструментом.
-3. **Reflection (~100 слов):** ответы на три вопроса —
-   - Что пошло не так?
-   - Как скорректировал подход?
-   - Почему финальная версия лучше первой попытки?
-
-**Дедлайн:** понедельник, 12 октября 2026, 23:59 Киев (EEST).
-
----
-
-## 6. Что оценивают
-
-> «We evaluate the process, not just the result.»
-
-Основной сигнал — **AI interaction log**. Комиссия ищет кандидатов, которые:
-
-- Активно итерируются.
-- Оспаривают галлюцинации модели.
-- Исправляют ошибки.
-- Направляют AI к функциональной архитектуре, а не принимают первый вывод.
+The AI interaction log is a primary signal. The committee looks for candidates who iterate, challenge incorrect or unsupported outputs, correct errors, and guide the AI toward a functional architecture instead of accepting the first answer uncritically.

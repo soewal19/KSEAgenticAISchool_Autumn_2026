@@ -1,167 +1,86 @@
-# SPEC — Air Alerts Forecasting
+# Behavioral Specification — Air-Alert Forecasting
 
-Точная спецификация правил построения целевой переменной, разбиения данных,
-каузальных признаков и выбора порога классификации. Любое изменение этих
-правил должно отражаться здесь и в соответствующих тестах.
+This document defines the target, time splits, causal-feature rules, threshold selection, and pipeline invariants. Update it when implementation or tests change.
 
----
+## 1. Target
 
-## 1. Целевая переменная (target)
+The task is binary prediction of a new alert onset in the selected region during the half-open interval (t, t + H]. H is configurable and defaults to 30 minutes.
 
-**Задача:** бинарная классификация начала воздушной тревоги в целевом регионе
-в интервале `(t, t + H]`, где `H` — горизонт прогноза (настраиваемый, по
-умолчанию 30 мин).
+~~~text
+y_t = 1 if a new alert starts in (t, t + H]
+y_t = 0 otherwise
+y_t = NaN when the full future horizon is not observed
+~~~
 
-### Формула
+- The current grid cell t is excluded.
+- A new onset is a 0-to-1 transition in the binary alert-activity series, not continuation of an alert already active at t.
+- The grid frequency defaults to five minutes.
+- Rows without a fully observed future horizon are excluded from model fitting and evaluation.
 
-```
-y_t = 1  iff  exists alert-start in (t, t + H]
-y_t = 0  otherwise
-y_t = NaN  for the last H cells (future not observed)
-```
+Implementation: [src/labels.py](src/labels.py), function make_target.
 
-### Правила
+Tests: test_make_target_is_forward_looking and test_make_target_excludes_current_cell.
 
-- Интервал **строго открыт слева**: текущая ячейка `t` исключается.
-- `alert-start` определяется как переход `0 -> 1` в бинарном ряду активности
-  тревоги (не продолжение уже активной тревоги).
-- `H` задаётся в минутах; число шагов = `max(1, H // freq_minutes)`.
-- Частота сетки `freq_minutes` по умолчанию = 5 мин.
-- Последние `H / freq_minutes` ячеек помечаются `NaN` и исключаются из
-  обучения и оценки.
+## 2. Chronological split
 
-### Реализация
+The configured cutoffs are exclusive:
 
-[`labels.make_target`](file:///e:/TestTask/KSE_Agentic_Autumn2026/air-alerts-forecast/src/labels.py)
-— forward rolling sum по индикатору начал, сдвинутый на `-H` шагов.
+~~~text
+train: [data_start, train_end)
+validation: [train_end, val_end)
+test: [val_end, data_end]
+~~~
 
-### Тесты
+Current configuration: train_end is 2023-12-31 and val_end is 2024-06-30. Therefore the test period begins at 2024-06-30 00:00 UTC.
 
-- `test_make_target_is_forward_looking` — `y_t` зависит только от будущего.
-- `test_make_target_excludes_current_cell` — ячейка `t` не влияет на `y_t`.
+- Splits use a UTC DatetimeIndex and do not shuffle rows.
+- Splits must not overlap and must remain ordered in time.
+- The threshold is selected on validation only.
+- Final reported metrics are computed on the held-out test period.
 
----
+Implementation: [src/features.py](src/features.py), function split_train_val_test.
 
-## 2. Хронологическое разбиение (split)
+## 3. Causal-feature policy
 
-**Принцип:** данные разбиваются по времени без перемешивания (no shuffling),
-чтобы предотвратить утечку будущего в прошлое.
+Every feature at time t must be computable from data available at or before t.
 
-### Границы (config.yaml)
+| Feature operation | Rule | Implementation |
+|---|---|---|
+| Target-region lag | Shift by k steps where k is at least 1 | add_lag_features |
+| Neighbor-region lag | Shift by k steps where k is at least 1 | add_lag_features |
+| Rolling onset count | Shift the onset series by one step before rolling; use a past-only window | add_rolling_alert_counts |
+| Calendar values | Deterministic functions of t | add_calendar_features |
+| Current state | Derive duration and recency from observed values through t | add_current_alert_duration, add_time_since_last_alert |
 
-```
-train:  [data_start,  train_end)       # train_end — исключается
-val:    [train_end,    val_end)        # val_end   — исключается
-test:   [val_end,      data_end]
-```
+Forbidden operations include negative shifts, windows that use future observations, fitting scalers or other learned transformations on validation or test, selecting thresholds on test, or using external content published after t.
 
-- `train_end = "2023-12-31"`
-- `val_end   = "2024-06-30"`
+The current model does not use EMA, MACD, or external text features.
 
-### Правила
+## 4. Threshold selection
 
-- Разбиение строго по `DatetimeIndex` (UTC).
-- Пересечения между сплитами **запрещены**.
-- Порог классификации выбирается **только на validation**.
-- Метрики финальной модели считаются **только на test**.
+The threshold is selected separately for each model using validation predictions only.
 
-### Реализация
+| Configuration | Selection rule |
+|---|---|
+| metric: f1 | Choose the candidate threshold with the highest validation F1 |
+| metric: recall | Choose the largest candidate threshold that reaches min_recall |
 
-[`features.split_train_val_test`](file:///e:/TestTask/KSE_Agentic_Autumn2026/air-alerts-forecast/src/features.py)
+The default minimum recall is 0.70. Candidates are drawn from 201 quantiles of validation probabilities. Test probabilities are evaluated with the chosen validation threshold unchanged.
 
-### Тесты
+Implementation: [src/models.py](src/models.py), function select_threshold.
 
-- `test_chronological_split` — train < val < test, нет пересечений.
+## 5. Metrics and evaluation
 
----
+PR-AUC (Average Precision) is the primary ranking metric because the positive class is uncommon. Secondary metrics include ROC-AUC, precision, recall, F1, Brier score, calibration, confusion matrix, and comparison with the persistence baseline.
 
-## 3. Каузальные признаки (causal features)
+The current project uses one chronological train/validation/test holdout. It also divides the test period into four ordered chunks to inspect degradation. That analysis is not rolling-origin backtesting.
 
-Все временные признаки должны использовать **только данные из прошлого**
-относительно момента прогноза `t`. Использование будущего запрещено.
+## 6. Pipeline invariants
 
-### Допустимые операции
-
-| Операция | Правило | Реализация |
-|----------|---------|------------|
-| **Lag** | `series.shift(k)`, `k >= 1` | `features.add_lag_features` |
-| **Rolling count** | `shifted.rolling(window=W, closed="left")`, окно `[t-W, t)` | `features.add_rolling_alert_counts` |
-| **EMA / MACD** | `series.ewm(span=W, adjust=False)` — экспоненциальное среднее по прошлым значениям | `agents.validation` |
-| **Calendar** | детерминированные функции от `t` (hour, dow, month, days_since_war_start) | `features.add_calendar_features` |
-| **Neighbor lag** | `neighbor_series.shift(k)`, `k >= 1` | `features.add_lag_features` с префиксом `nb_` |
-| **Current state** | `current_alert_duration`, `time_since_last_alert` — вычисляются из значений ≤ t | `features.add_current_alert_duration`, `add_time_since_last_alert` |
-
-### Запрещённые операции
-
-- `shift(-k)` (look-ahead).
-- `rolling(..., closed="right" или "both")` включая текущую ячейку для таргета.
-- Любые агрегаты, использующие данные после `t`.
-- Обучаемые энкодеры/скейлеры, фитящиеся на всём датасете (фитятся только на train).
-
-### Проверка каузальности
-
-- `validate_no_leakage.check_lag_features_not_future` — голова lag-признаков = 0 (cold start), тело совпадает с прошлыми значениями.
-- `validate_no_leakage.check_target_correctness` — target вычислен без утечки.
-- `validate_no_leakage.check_no_target_in_features` — целевой столбец не попал в признаки.
-
-### Тесты
-
-- `test_lag_features_use_past_only` — lag-признаки используют только прошлое.
-
----
-
-## 4. Выбор порога классификации (threshold)
-
-Порог выбирается **исключительно на validation** выборке. На test применяется
-готовый порог без подстройки.
-
-### Режимы (config.threshold)
-
-| `metric` | Правило выбора |
-|----------|----------------|
-| `"f1"`   | порог, максимизирующий F1 на validation |
-| `"recall"` | наибольший порог, при котором `recall >= min_recall` |
-
-### Параметры
-
-- `min_recall` — минимальный требуемый recall (по умолчанию 0.70).
-- Кандидаты порогов: 201 квантиль распределения вероятностей на validation.
-
-### Реализация
-
-[`models.select_threshold`](file:///e:/TestTask/KSE_Agentic_Autumn2026/air-alerts-forecast/src/models.py)
-
-### Правила
-
-- Порог **никогда** не выбирается на test.
-- При отсутствии валидных кандидатов — fallback `threshold = 0.5`.
-- Каждая модель получает собственный порог, подобранный на validation.
-
----
-
-## 5. Метрики оценки
-
-Основная метрика — **PR-AUC** (Average Precision), так как классы
-несбалансированы (~2.8% положительных). Дополнительно:
-
-- ROC-AUC
-- F1 (при выбранном пороге)
-- Precision / Recall
-- Brier score
-- Calibration curve
-- Lift over persistence baseline
-
-Порог и PR-AUC на validation используются для сравнения моделей; финальные
-метрики — на test.
-
----
-
-## 6. Invariants (инварианты пайплайна)
-
-1. Все lag-признаки имеют `shift(k >= 1)`.
-2. Все rolling-окна используют `closed="left"` и исключают текущую ячейку.
-3. Target `y_t` не зависит от значений ряда в момент `t` и ранее `t`.
-4. Splits не пересекаются и упорядочены по времени.
-5. Порог классификации выбирается только на validation.
-6. Скейлеры/энкодеры фитятся только на train.
-7. Каждый запуск сохраняет run-log с `run_id`, `config_hash`, `feature_names`, `metrics`.
+1. All lag features use at least one past step.
+2. Rolling onset features exclude information after the forecast timestamp.
+3. The target is forward-looking; features are not.
+4. Splits are ordered and disjoint.
+5. Thresholds are selected on validation only.
+6. Scalers are fitted on training data only.
+7. Each full run writes a JSON run log with a run ID, configuration hash, feature names, and metrics.
