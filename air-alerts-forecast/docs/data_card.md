@@ -10,13 +10,13 @@ The data supports retrospective, educational analysis of alert activity and shor
 
 ## Contents and processing
 
-The source contains oblast, raion, hromada, administrative level, alert start and end timestamps, and source fields. The current modelling path retains oblast-level intervals, parses timestamps as UTC, removes invalid and duplicate intervals, then constructs a five-minute regional activity series.
+The source contains oblast, raion, hromada, administrative level, alert start and end timestamps, and source fields. The modelling path retains oblast- and raion-level intervals, groups both by parent oblast, discards hromada rows to avoid nested duplicates, parses timestamps as UTC, removes invalid/exact duplicate intervals, and unions overlaps into five-minute binary regional activity series.
 
 The regions in the default configuration are Kyiv City, Kyivska oblast, Chernihivska oblast, and Sumska oblast. The primary target is Kyiv City.
 
 ## Temporal coverage
 
-The repository's current README records the source snapshot as spanning 2022-03-15 through 2026-09-07. The exact evaluation grid ends at the final interval available in the downloaded snapshot; the saved full-run test predictions currently cover 2024-06-30 00:00 UTC through 2026-09-05 23:10 UTC. Re-check the source when refreshing the data.
+The source was fetched from the configured upstream URL on 2026-10-12. It contains 299,275 raw rows and spans 2022-03-15 through the latest alert start at 2026-09-07 05:28:22 UTC. The data digest is `b396f87696243069eec0219880e87dcd642b20beb0a7bae0d0e1f61e1ed20ec4`. The source returned the same bytes as the previous local copy, so no newer upstream records were available at refresh time. The full-run test predictions cover 2024-06-30 00:00 through 2026-09-07 05:05 UTC.
 
 ## Known limitations
 

@@ -41,9 +41,9 @@ def synthetic_intervals() -> pd.DataFrame:
     })
 
 
-def test_clean_intervals_filters_oblast_and_parses_times(synthetic_intervals):
+def test_clean_intervals_keeps_oblast_and_raion_and_parses_times(synthetic_intervals):
     df = clean_intervals(synthetic_intervals)
-    assert (df["level"] == "oblast").all()
+    assert set(df["level"]) == {"oblast"}
     assert pd.api.types.is_datetime64_any_dtype(df["started_at"])
     assert "duration_min" in df.columns
     assert (df["duration_min"] > 0).all()
@@ -61,6 +61,26 @@ def test_clean_intervals_removes_duplicates():
     })
     cleaned = clean_intervals(df)
     assert len(cleaned) == 1
+
+
+def test_clean_intervals_aggregates_raion_and_discards_hromada():
+    raw = pd.DataFrame({
+        "oblast": ["Kyivska oblast", "Kyivska oblast", "Kyivska oblast"],
+        "raion": [None, "Bucha", "Bucha"],
+        "hromada": [None, None, "Irpin"],
+        "level": ["oblast", "raion", "hromada"],
+        "started_at": ["2026-01-01T00:00:00Z"] * 3,
+        "finished_at": ["2026-01-01T00:30:00Z"] * 3,
+    })
+    cleaned = clean_intervals(raw)
+    assert set(cleaned["level"]) == {"oblast", "raion"}
+    assert len(cleaned) == 2
+    series = build_region_binary_series(
+        cleaned, "Kyivska oblast", 5,
+        start=pd.Timestamp("2026-01-01T00:00:00Z"),
+        end=pd.Timestamp("2026-01-01T00:30:00Z"),
+    )
+    assert int(series.sum()) == 6
 
 
 def test_binary_series_expansion(synthetic_intervals):
@@ -107,6 +127,46 @@ def test_chronological_split():
     assert te.index.min() >= pd.Timestamp("2023-07-01", tz="UTC")
     assert len(set(tr.index) & set(va.index)) == 0
     assert len(set(va.index) & set(te.index)) == 0
+
+
+def test_labeled_split_embargoes_forward_target_windows():
+    from src.features import split_labeled_train_val_test
+
+    idx = pd.date_range("2024-01-01", periods=48, freq="5min", tz="UTC")
+    X = pd.DataFrame({"x": range(len(idx))}, index=idx)
+    y = pd.Series(0, index=idx, dtype="int8")
+    (x_train, y_train), (x_val, y_val), (x_test, y_test) = split_labeled_train_val_test(
+        X, y, "2024-01-01 01:00", "2024-01-01 02:00", 30
+    )
+    train_end = pd.Timestamp("2024-01-01 01:00", tz="UTC")
+    val_end = pd.Timestamp("2024-01-01 02:00", tz="UTC")
+    assert (x_train.index + pd.Timedelta(minutes=30) < train_end).all()
+    assert (x_val.index + pd.Timedelta(minutes=30) < val_end).all()
+    assert (x_test.index >= val_end).all()
+    assert x_train.index.max() == pd.Timestamp("2024-01-01 00:25", tz="UTC")
+    assert x_val.index.max() == pd.Timestamp("2024-01-01 01:25", tz="UTC")
+    assert x_train.index.equals(y_train.index)
+    assert x_val.index.equals(y_val.index)
+    assert x_test.index.equals(y_test.index)
+
+
+def test_refresh_rejects_unexpected_schema_without_replacing_cache(tmp_path, monkeypatch):
+    from src.data_loader import download_if_needed
+
+    destination = tmp_path / "alerts.csv"
+    destination.write_text("cached source", encoding="utf-8")
+
+    class Response:
+        content = b"unexpected_column\nvalue\n"
+
+        @staticmethod
+        def raise_for_status():
+            pass
+
+    monkeypatch.setattr("src.data_loader.requests.get", lambda *args, **kwargs: Response())
+    with pytest.raises(ValueError, match="missing required columns"):
+        download_if_needed("https://example.test/alerts.csv", destination, refresh=True)
+    assert destination.read_text(encoding="utf-8") == "cached source"
 
 
 def test_lag_features_use_past_only():

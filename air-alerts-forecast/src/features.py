@@ -179,3 +179,38 @@ def split_train_val_test(
         "Split sizes: train=%d, val=%d, test=%d", len(train), len(val), len(test)
     )
     return train, val, test
+
+
+def split_labeled_train_val_test(
+    X: pd.DataFrame,
+    y: pd.Series,
+    train_end: str,
+    val_end: str,
+    horizon_minutes: int,
+) -> tuple[tuple[pd.DataFrame, pd.Series], tuple[pd.DataFrame, pd.Series], tuple[pd.DataFrame, pd.Series]]:
+    """Split aligned rows and purge labels whose forward window crosses a cutoff.
+
+    The target at ``t`` observes outcomes in ``(t, t + horizon]``. A row is
+    retained only when that full window ends strictly before the next split.
+    Rows with unknown targets are excluded from all returned partitions.
+    """
+    if not X.index.equals(y.index):
+        raise ValueError("Feature and target indexes must be identical")
+    train_cut = pd.Timestamp(train_end)
+    val_cut = pd.Timestamp(val_end)
+    train_cut = train_cut.tz_localize("UTC") if train_cut.tzinfo is None else train_cut.tz_convert("UTC")
+    val_cut = val_cut.tz_localize("UTC") if val_cut.tzinfo is None else val_cut.tz_convert("UTC")
+    horizon = pd.Timedelta(minutes=horizon_minutes)
+    idx = X.index
+    known = y.notna()
+    train_mask = (idx + horizon < train_cut) & known.to_numpy()
+    val_mask = (idx >= train_cut) & (idx + horizon < val_cut) & known.to_numpy()
+    test_mask = (idx >= val_cut) & known.to_numpy()
+
+    def select(mask: np.ndarray) -> tuple[pd.DataFrame, pd.Series]:
+        return X.loc[mask], y.loc[mask].astype(int)
+
+    splits = select(train_mask), select(val_mask), select(test_mask)
+    logger.info("Embargoed labeled split sizes: train=%d, val=%d, test=%d",
+                len(splits[0][0]), len(splits[1][0]), len(splits[2][0]))
+    return splits

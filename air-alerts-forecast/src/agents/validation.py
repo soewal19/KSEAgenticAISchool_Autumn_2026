@@ -19,7 +19,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import average_precision_score
 
 from ..config import AppConfig
-from ..features import split_train_val_test
+from ..features import split_labeled_train_val_test
 from ..labels import make_target
 from .schema import Hypothesis, ValidationResult
 
@@ -126,13 +126,12 @@ class ValidationAgent:
         if self._baseline_pr_auc is not None:
             return self._baseline_pr_auc
         y = make_target(self.target, self.config.time.horizon_minutes, self.freq)
-        Xtr, Xval, _ = split_train_val_test(self.X_base, self.config.split.train_end, self.config.split.val_end)
-        ytr, yval, _ = split_train_val_test(y.to_frame("y"), self.config.split.train_end, self.config.split.val_end)
-        mask_tr = ytr["y"].notna()
-        mask_va = yval["y"].notna()
+        (Xtr, ytr), (Xval, yval), _ = split_labeled_train_val_test(
+            self.X_base, y, self.config.split.train_end, self.config.split.val_end,
+            self.config.time.horizon_minutes,
+        )
         self._baseline_pr_auc = self._train_eval_pr_auc(
-            Xtr[mask_tr], ytr["y"][mask_tr].astype(int),
-            Xval[mask_va], yval["y"][mask_va].astype(int),
+            Xtr, ytr, Xval, yval,
             self.config.project.random_state,
         )
         return self._baseline_pr_auc
@@ -145,28 +144,27 @@ class ValidationAgent:
         """
         train_end = pd.Timestamp(self.config.split.train_end, tz="UTC")
         val_end = pd.Timestamp(self.config.split.val_end, tz="UTC")
-        val_mask = (X.index >= train_end) & (X.index < val_end)
-        val_idx = X.index[val_mask]
-        if len(val_idx) < n_folds * 2:
+        horizon = pd.Timedelta(minutes=self.config.time.horizon_minutes)
+        eligible_val = X.index[(X.index >= train_end) & (X.index + horizon < val_end) & y.notna().to_numpy()]
+        if len(eligible_val) < n_folds * 2:
             return []
-        fold_size = len(val_idx) // n_folds
         results = []
-        for k in range(n_folds):
-            fold_val_end = val_idx[(k + 1) * fold_size - 1]
-            fold_train = X[X.index < fold_val_end]
-            fold_val = X[(X.index >= val_idx[k * fold_size]) & (X.index <= fold_val_end)]
-            y_fold_train = y[y.index < fold_val_end]
-            y_fold_val = y[(y.index >= val_idx[k * fold_size]) & (y.index <= fold_val_end)]
-            mask_tr = y_fold_train.notna()
-            mask_va = y_fold_val.notna()
-            if mask_tr.sum() == 0 or mask_va.sum() == 0:
+        chunks = np.array_split(eligible_val, n_folds)
+        for k, chunk in enumerate(chunks):
+            if len(chunk) == 0:
+                continue
+            fold_start, fold_end = chunk[0], chunk[-1] + pd.Timedelta(nanoseconds=1)
+            train_mask = (X.index + horizon < fold_start) & y.notna().to_numpy()
+            val_mask = (X.index >= fold_start) & (X.index <= chunk[-1]) & y.notna().to_numpy()
+            if not train_mask.any() or not val_mask.any():
                 continue
             pr = self._train_eval_pr_auc(
-                fold_train[mask_tr], y_fold_train[mask_tr].astype(int),
-                fold_val[mask_va], y_fold_val[mask_va].astype(int),
+                X.loc[train_mask], y.loc[train_mask].astype(int),
+                X.loc[val_mask], y.loc[val_mask].astype(int),
                 self.config.project.random_state,
             )
-            results.append({"fold": k, "pr_auc": pr})
+            results.append({"fold": k, "start": fold_start.isoformat(),
+                            "end_exclusive": fold_end.isoformat(), "pr_auc": pr})
         return results
 
     def validate(self, hyp: Hypothesis) -> ValidationResult:
@@ -183,13 +181,12 @@ class ValidationAgent:
 
         # Baseline vs hypothesis PR-AUC on validation
         baseline = self.get_baseline_pr_auc()
-        Xtr, Xval, _ = split_train_val_test(X, self.config.split.train_end, self.config.split.val_end)
-        ytr, yval, _ = split_train_val_test(y.to_frame("y"), self.config.split.train_end, self.config.split.val_end)
-        mask_tr = ytr["y"].notna()
-        mask_va = yval["y"].notna()
+        (Xtr, ytr), (Xval, yval), _ = split_labeled_train_val_test(
+            X, y, self.config.split.train_end, self.config.split.val_end,
+            self.config.time.horizon_minutes,
+        )
         hyp_pr = self._train_eval_pr_auc(
-            Xtr[mask_tr], ytr["y"][mask_tr].astype(int),
-            Xval[mask_va], yval["y"][mask_va].astype(int),
+            Xtr, ytr, Xval, yval,
             self.config.project.random_state,
         )
 
@@ -200,14 +197,14 @@ class ValidationAgent:
         for fold_res in folds:
             # baseline fold PR-AUC (base features, same fold)
             base_folds = self._rolling_origin_folds(self.X_base, y, n_folds=3)
-            base_pr = base_folds[fold_res["fold"]]["pr_auc"] if fold_res["fold"] < len(base_folds) else baseline
+            matching = next((f for f in base_folds if f["fold"] == fold_res["fold"]), None)
+            base_pr = matching["pr_auc"] if matching is not None else baseline
             if fold_res["pr_auc"] > base_pr:
                 folds_improved += 1
 
         # Reproducibility: re-run with same seed, check PR-AUC matches
         hyp_pr_2 = self._train_eval_pr_auc(
-            Xtr[mask_tr], ytr["y"][mask_tr].astype(int),
-            Xval[mask_va], yval["y"][mask_va].astype(int),
+            Xtr, ytr, Xval, yval,
             self.config.project.random_state,
         )
         reproducible = abs(hyp_pr - hyp_pr_2) < 1e-6

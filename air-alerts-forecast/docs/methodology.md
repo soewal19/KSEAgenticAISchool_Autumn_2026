@@ -18,7 +18,7 @@ Alert onsets are irregular and affected by external factors that are not observe
 
 ## Data preparation
 
-The source contains alert intervals across oblast, raion, and hromada administrative levels. The current regional analysis keeps oblast-level records to avoid counting nested representations of the same alert as separate regional events. Timestamps are parsed as UTC; invalid or duplicate intervals are removed. Intervals are expanded to a five-minute grid, where a cell is active if an alert overlaps it.
+The source contains alert intervals across oblast, raion, and hromada administrative levels. Regional analysis keeps oblast and raion rows, assigns them to their parent oblast, and drops hromada rows to avoid counting nested representations repeatedly. Exact duplicate intervals within a level are removed; overlapping intervals are unioned into a binary regional activity series. Timestamps are parsed as UTC and invalid intervals are removed. A five-minute grid cell is active if any retained interval overlaps it.
 
 ## Causal feature policy
 
@@ -49,9 +49,9 @@ Random splitting is inappropriate because it allows observations from later peri
 | Validation | 2023-12-31 00:00 through 2024-06-29 23:55 |
 | Test | From 2024-06-30 00:00 through the final observed grid cell |
 
-The cutoffs are half-open: train ends at train_end, validation ends at val_end, and test begins at val_end. Scalers are fit on training data. Thresholds are selected on validation data and then frozen for test evaluation.
+The cutoffs are half-open: train ends at train_end, validation ends at val_end, and test begins at val_end. A label is retained in train or validation only if its full forward horizon ends strictly before that partition's cutoff; this purges the final 30 minutes before each boundary. Test labels are retained only when observed. Scalers are fit on training data. Thresholds are selected on validation data and then frozen for test evaluation.
 
-The test period is also split into four chronological chunks to inspect metric degradation. This is a descriptive breakdown of one fixed test holdout, not rolling-origin backtesting. Rolling-origin folds remain a potential extension.
+The test period is also split into four chronological chunks to inspect metric degradation. This is a descriptive breakdown of one fixed test holdout, not rolling-origin backtesting. The separate hypothesis-validation subsystem evaluates candidate feature changes on three expanding rolling-origin folds inside validation; it is not the primary benchmark reported here.
 
 ## Metrics
 

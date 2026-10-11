@@ -21,7 +21,7 @@ import pandas as pd
 
 from .config import AppConfig, load_config
 from .data_loader import load_raw
-from .features import build_features, split_train_val_test
+from .features import build_features, split_train_val_test, split_labeled_train_val_test
 from .labels import alert_starts, make_target
 from .logger import get_logger
 from .preprocessing import build_multi_region_frame, clean_intervals
@@ -78,6 +78,28 @@ def check_chronological_split(X: pd.DataFrame, config: AppConfig, c: Checker) ->
         len(set(tr.index) & set(va.index)) == 0 and len(set(va.index) & set(te.index)) == 0
         and len(set(tr.index) & set(te.index)) == 0,
         "splits are disjoint",
+    )
+
+
+def check_label_embargo(
+    X: pd.DataFrame, y: pd.Series, config: AppConfig, c: Checker
+) -> None:
+    (x_train, _), (x_val, _), (x_test, _) = split_labeled_train_val_test(
+        X, y, config.split.train_end, config.split.val_end,
+        config.time.horizon_minutes,
+    )
+    horizon = pd.Timedelta(minutes=config.time.horizon_minutes)
+    train_end = pd.Timestamp(config.split.train_end, tz="UTC")
+    val_end = pd.Timestamp(config.split.val_end, tz="UTC")
+    train_ok = len(x_train) > 0 and (x_train.index + horizon < train_end).all()
+    val_ok = len(x_val) > 0 and (x_val.index + horizon < val_end).all()
+    test_ok = len(x_test) > 0 and (x_test.index >= val_end).all()
+    c.check(
+        "Label horizon embargo at split boundaries",
+        train_ok and val_ok and test_ok,
+        f"train max label end={(x_train.index.max() + horizon) if len(x_train) else None}; "
+        f"val max label end={(x_val.index.max() + horizon) if len(x_val) else None}; "
+        f"horizon={horizon}",
     )
 
 
@@ -163,6 +185,7 @@ def main() -> int:
 
     c = Checker()
     check_chronological_split(X, config, c)
+    check_label_embargo(X, y, config, c)
     check_no_nan_inf(X, c)
     check_target_correctness(
         target_series, y, config.time.horizon_minutes, config.time.freq_minutes, c

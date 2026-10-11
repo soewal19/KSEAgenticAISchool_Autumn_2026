@@ -13,7 +13,7 @@ test:
 
 smoke:
 	$(PYTHON) -m src.pipeline all --config config.smoke.yaml
-	$(PYTHON) -c "from pathlib import Path; p=Path('outputs/metrics/smoke_metrics.json'); assert p.is_file() and p.stat().st_size > 0"
+	$(PYTHON) -c "from pathlib import Path; p=Path('outputs/smoke/metrics/smoke_metrics.json'); assert p.is_file() and p.stat().st_size > 0"
 
 run:
 	docker run --rm -v "$(CURDIR)/outputs:/app/outputs" -e DATABASE_URL $(IMAGE) python -m src.pipeline all --config config.yaml

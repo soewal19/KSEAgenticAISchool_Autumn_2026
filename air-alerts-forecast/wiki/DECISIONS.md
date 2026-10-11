@@ -28,24 +28,24 @@
 
 ## D-003 — Purge labels that cross split cutoffs
 
-**Decision:** The current split policy needs an embargo of at least the forecast horizon at train/validation boundaries before its metrics can be treated as leakage-safe.
+**Decision:** Purge rows whose forward label window reaches a subsequent partition boundary.
 
-**Evidence:** [`src/labels.py`](../src/labels.py) constructs labels using observations up to `t + H`; [`src/features.py`](../src/features.py) currently partitions rows by timestamp alone; [`src/pipeline.py`](../src/pipeline.py) applies those row splits to features and labels.
+**Evidence:** [`src/labels.py`](../src/labels.py) constructs labels using observations up to `t + H`; [`src/features.py`](../src/features.py) now provides `split_labeled_train_val_test`, and [`src/pipeline.py`](../src/pipeline.py) uses a 30-minute purge at train/validation/test boundaries.
 
 **Interpretation:** Labels near a cutoff can depend on events in the following partition, so the current chronological index check does not guarantee independence of split outcomes.
 
-**Status:** Required correction, not yet implemented.
+**Status:** Implemented and covered by unit and leakage-validation checks.
 
 **Confidence:** High.
 
 ## D-004 — Preserve regional coverage after the source's level change
 
-**Decision:** Do not silently discard post-2025 raion observations when constructing oblast-level regional series.
+**Decision:** Include oblast and raion intervals in parent-oblast series; drop hromada rows and union overlapping intervals.
 
-**Evidence:** Upstream [dataset documentation](https://github.com/Vadimkin/ukrainian-air-raid-sirens-dataset/blob/main/datasets/README.md) describes the shift to mostly raion-level alerts; [`src/preprocessing.py`](../src/preprocessing.py) currently filters to oblast-level records.
+**Evidence:** Upstream [dataset documentation](https://github.com/Vadimkin/ukrainian-air-raid-sirens-dataset/blob/main/datasets/README.md) describes the shift to mostly raion-level alerts; [`src/preprocessing.py`](../src/preprocessing.py) now retains oblast/raion levels and unions overlapping intervals by parent oblast.
 
 **Interpretation:** The current neighboring-region inputs can become incomplete in the latest period.
 
-**Status:** Aggregation policy and refreshed evaluation are still required.
+**Status:** Implemented; latest upstream data was fetched and the benchmark rerun on 2026-10-12.
 
 **Confidence:** High for the mismatch; medium for the best aggregation policy until overlaps are audited.

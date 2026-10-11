@@ -18,8 +18,10 @@
 
 ## Current check status
 
-**Interpretation:** The existing validator confirms chronological row indices and checks target/lag alignment, but it does not test whether forward-looking labels cross `train_end` or `val_end`.
+**Interpretation:** The validator checks chronological row indices, target/lag alignment, and whether the forward label windows remain inside the training and validation periods.
 
-**Decision:** The current pipeline does not yet satisfy Rule 3. Add boundary-purge checks and tests before treating current holdout metrics as leakage-safe.
+**Decision:** Purge any training or validation row whose forward target window reaches the next partition.
 
-**Confidence:** High; this follows directly from the target horizon and timestamp-only split implementation.
+**Status:** Implemented in `split_labeled_train_val_test`; unit tests and the leakage gate verify the embargo at both cutoffs.
+
+**Confidence:** High; tests assert that every retained training and validation target window ends before its next cutoff.

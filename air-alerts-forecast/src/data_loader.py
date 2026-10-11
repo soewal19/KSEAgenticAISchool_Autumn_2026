@@ -8,6 +8,7 @@ missing values and duplicates without fabricating any field names.
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -19,40 +20,61 @@ from .logger import get_logger
 logger = get_logger("data_loader")
 
 
-def download_if_needed(url: str, dest: str | Path, timeout: int = 60) -> Path:
-    """Download the dataset file if it does not already exist locally.
+def download_if_needed(
+    url: str, dest: str | Path, timeout: int = 60, refresh: bool = False
+) -> Path:
+    """Use a local cache or atomically download/refresh the dataset file.
 
     Args:
         url: Remote URL of the CSV dataset.
         dest: Local destination path.
         timeout: HTTP timeout in seconds.
+        refresh: Fetch a fresh copy even when a non-empty local file exists.
 
     Returns:
         Resolved local path of the dataset.
     """
     dest = Path(dest)
-    if dest.exists() and dest.stat().st_size > 0:
+    if not refresh and dest.exists() and dest.stat().st_size > 0:
         logger.info("Dataset already present at %s (%d bytes)", dest, dest.stat().st_size)
         return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
     logger.info("Downloading dataset from %s", url)
     resp = requests.get(url, timeout=timeout)
     resp.raise_for_status()
-    dest.write_bytes(resp.content)
+    temporary = dest.with_name(f"{dest.name}.download")
+    try:
+        temporary.write_bytes(resp.content)
+        if temporary.stat().st_size == 0:
+            raise ValueError("Downloaded dataset is empty")
+        actual_columns = set(pd.read_csv(temporary, nrows=0).columns)
+        required_columns = {
+            "oblast", "raion", "hromada", "level",
+            "started_at", "finished_at", "source",
+        }
+        missing_columns = required_columns - actual_columns
+        if missing_columns:
+            raise ValueError(
+                f"Downloaded dataset is missing required columns: {sorted(missing_columns)}"
+            )
+        os.replace(temporary, dest)
+    finally:
+        temporary.unlink(missing_ok=True)
     logger.info("Saved dataset to %s (%d bytes)", dest, dest.stat().st_size)
     return dest
 
 
-def load_raw(config: AppConfig) -> pd.DataFrame:
+def load_raw(config: AppConfig, refresh: bool = False) -> pd.DataFrame:
     """Load the raw siren intervals dataset.
 
     Args:
         config: Application configuration.
+        refresh: Refresh the local cache from the configured source.
 
     Returns:
         Raw DataFrame as-is from the CSV.
     """
-    path = download_if_needed(config.data.source_url, config.data.raw_path)
+    path = download_if_needed(config.data.source_url, config.data.raw_path, refresh=refresh)
     df = pd.read_csv(path)
     logger.info("Loaded raw dataset: %d rows, %d columns", len(df), len(df.columns))
     return df

@@ -25,7 +25,7 @@ Medium that the source supports these as research directions; low that the exist
 **Evidence**
 
 - The [upstream dataset documentation](https://github.com/Vadimkin/ukrainian-air-raid-sirens-dataset/blob/main/datasets/README.md) says the datasets are updated daily and notes that since December 2025 alerts are mostly recorded at raion (district) level.
-- The local `data/raw/official_data_en.csv` snapshot inspected on 2026-10-11 spans 2022-03-15 through 2026-09-07. For the configured neighboring oblasts after 2025-12-01, the local file has rows at `raion` level; [`src/preprocessing.py`](../src/preprocessing.py) currently keeps only `level == "oblast"`.
+- The upstream CSV fetched on 2026-10-12 contains 299,275 rows through 2026-09-07 05:28:22 UTC. The upstream response had the same content digest as the previous local snapshot. [`src/preprocessing.py`](../src/preprocessing.py) now retains oblast and raion records, assigns both to parent oblasts, and unions overlapping intervals while dropping hromada rows.
 - The configured loader reuses a non-empty local file instead of checking the upstream version or freshness: [`src/data_loader.py`](../src/data_loader.py).
 
 **Interpretation**
@@ -34,7 +34,7 @@ The current cleaning path can discard most neighboring-region observations after
 
 **Decision**
 
-Before treating a refreshed benchmark as representative, implement and validate a region-level aggregation policy for raion rows (including overlap handling), refresh the source snapshot, and record the exact data cutoff and digest.
+The region-level aggregation policy is implemented and tested. The source snapshot was fetched and its exact cutoff and digest are recorded in [`docs/data_card.md`](../docs/data_card.md); because the upstream bytes were unchanged, no more recent rows were available at refresh time.
 
 **Confidence**
 

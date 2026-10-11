@@ -34,7 +34,7 @@ from .evaluation import (
     print_metrics_table,
     save_metrics,
 )
-from .features import build_features, split_train_val_test
+from .features import build_features, split_labeled_train_val_test
 from .labels import make_target
 from .logger import get_logger
 from .models import fit_model
@@ -55,6 +55,7 @@ from .preprocessing import build_multi_region_frame, clean_intervals
 from .validate_no_leakage import (
     Checker,
     check_chronological_split,
+    check_label_embargo,
     check_lag_features_not_future,
     check_no_nan_inf,
     check_no_target_in_features,
@@ -116,6 +117,7 @@ def run_validation_stage(
     """
     c = Checker()
     check_chronological_split(X, config, c)
+    check_label_embargo(X, y, config, c)
     check_no_nan_inf(X, c)
     check_target_correctness(
         target_series, y, config.time.horizon_minutes, config.time.freq_minutes, c
@@ -149,14 +151,10 @@ def run_train_stage(
     config: AppConfig, X: pd.DataFrame, y: pd.Series
 ) -> dict:
     """Fit all models, save artifacts. Returns dict of fitted artifacts."""
-    Xtr, Xval, Xte = split_train_val_test(X, config.split.train_end, config.split.val_end)
-    ytr, yval, yte = split_train_val_test(y.to_frame("target"), config.split.train_end, config.split.val_end)
-    ytr, yval, yte = ytr["target"], yval["target"], yte["target"]
-
-    mask_tr = ytr.notna()
-    mask_va = yval.notna()
-    Xtr, ytr = Xtr[mask_tr], ytr[mask_tr]
-    Xval, yval = Xval[mask_va], yval[mask_va]
+    (Xtr, ytr), (Xval, yval), (Xte, yte) = split_labeled_train_val_test(
+        X, y, config.split.train_end, config.split.val_end,
+        config.time.horizon_minutes,
+    )
 
     artifacts: dict = {}
     for name in config.models:
@@ -274,6 +272,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Air-alert forecasting pipeline")
     parser.add_argument("stage", choices=["data", "features", "train", "evaluate", "all"], default="all", nargs="?")
     parser.add_argument("--config", default="config.yaml")
+    parser.add_argument("--refresh-data", action="store_true", help="Refresh the cached raw CSV before running")
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -295,7 +294,7 @@ def main() -> None:
 
     data_audit: DataAuditResult | None = None
     if level >= 1:
-        raw = load_raw(config)
+        raw = load_raw(config, refresh=args.refresh_data)
         dataset_version = hashlib.sha256(
             raw.to_csv(index=False).encode("utf-8")
         ).hexdigest()

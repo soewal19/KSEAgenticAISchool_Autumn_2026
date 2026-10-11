@@ -38,6 +38,6 @@ threshold:
 
 outputs:
   figures_dir: "outputs/smoke/figures"
-  metrics_dir: "outputs/metrics"
+  metrics_dir: "outputs/smoke/metrics"
   predictions_dir: "outputs/smoke/predictions"
   metrics_filename: "smoke_metrics.json"

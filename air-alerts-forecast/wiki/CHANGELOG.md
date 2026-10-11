@@ -1,5 +1,12 @@
 # Wiki Changelog
 
+## 2026-10-12
+
+- Added a 30-minute purge for forward labels across train/validation/test cutoffs, with explicit leakage checks.
+- Aggregated oblast and raion intervals by parent oblast, unioning overlaps and dropping nested hromada rows.
+- Refreshed the upstream source snapshot; it returned the same data through 2026-09-07 05:28:22 UTC. Recomputed the full holdout metrics and updated result documentation.
+- Isolated smoke artifacts under `outputs/smoke/` and replaced the reconstructed AI process note with the retained conversation export.
+
 ## 2026-10-11
 
 - Created the Markdown knowledge base and linked its index from the project README.

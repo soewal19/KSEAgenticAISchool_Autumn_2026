@@ -11,9 +11,9 @@ For region r, timestamp t, and horizon H, the target is 1 when a new alert start
 ## Method
 
 - Raw source: the public [Ukrainian air-raid siren dataset](https://github.com/Vadimkin/ukrainian-air-raid-sirens-dataset), file official_data_en.csv.
-- The source contains interval records at oblast, raion, and hromada levels. The modelling series retains oblast-level intervals and expands them to a regular five-minute grid.
+- The source contains interval records at oblast, raion, and hromada levels. The modelling series combines oblast and raion events under their parent oblast, drops hromada rows to avoid nested duplication, unions overlaps, and expands activity to a regular five-minute grid.
 - Features include past-only lags, rolling alert-onset counts, current alert duration, time since the previous alert, calendar variables, and lagged activity in neighboring regions.
-- Train, validation, and test are chronological and non-overlapping. The classification threshold is selected on validation data only.
+- Train, validation, and test are chronological. A 30-minute label embargo purges rows whose forward target window reaches the next partition. The classification threshold is selected on validation data only.
 - PR-AUC is the primary metric because positive alert-onset windows are relatively rare.
 
 See [the methodology](docs/methodology.md) for the target definition, leakage controls, evaluation design, and interpretation of figures.
@@ -48,17 +48,17 @@ The current evaluation is a single chronological train/validation/test holdout. 
 
 ## Current holdout results
 
-Results below come from the full dataset run recorded in outputs/metrics/test_metrics.json. The test base rate is about 3.28%; interpret thresholded metrics alongside this imbalance and the high false-positive rates.
+Results below come from the full dataset run recorded in outputs/metrics/test_metrics.json. The downloaded source snapshot was checked on 2026-10-12 and its latest alert starts at 2026-09-07 05:28:22 UTC. The test base rate is about 3.28%; interpret thresholded metrics alongside this imbalance and the false-positive rates.
 
 | Model | PR-AUC | ROC-AUC | Precision | Recall | F1 | Brier score |
 |---|---:|---:|---:|---:|---:|---:|
 | Persistence | 0.032 | 0.475 | 0.033 | 1.000 | 0.064 | 0.047 |
 | Seasonal | 0.035 | 0.517 | 0.034 | 0.123 | 0.053 | 0.032 |
-| Logistic regression | 0.077 | 0.627 | 0.033 | 1.000 | 0.064 | 0.118 |
-| Random forest | **0.079** | **0.628** | 0.038 | 0.787 | **0.073** | 0.117 |
-| LightGBM | 0.043 | 0.539 | 0.043 | 0.160 | 0.067 | 0.055 |
+| Logistic regression | **0.103** | **0.722** | **0.125** | 0.417 | **0.193** | 0.181 |
+| Random forest | 0.089 | 0.709 | 0.073 | **0.547** | 0.128 | 0.182 |
+| LightGBM | 0.053 | 0.570 | 0.075 | 0.141 | 0.098 | 0.051 |
 
-The random forest has the highest PR-AUC in this run, at roughly 2.47 times the persistence PR-AUC. Its precision is still low, and the thresholded false-positive rate is high. This is a retrospective benchmark, not evidence of reliable future warning.
+Logistic regression has the highest PR-AUC in this run, at roughly 3.20 times the persistence PR-AUC. Its precision is 12.5%; false positives remain substantial. This is a retrospective benchmark, not evidence of reliable future warning.
 
 ## Run locally with pip
 
@@ -69,6 +69,9 @@ pip install -r requirements.txt
 
 # Full project pipeline (downloads the configured historical source if needed)
 make all
+
+# Explicitly refresh the cached source before a full run
+python -m src.pipeline all --config config.yaml --refresh-data
 
 # Small, deterministic end-to-end check
 make smoke
@@ -97,7 +100,7 @@ The image's default command displays CLI help. For a small container smoke run:
 
 ~~~bash
 docker run --rm air-alerts-forecast:local sh -c \
-  'python -m src.pipeline all --config config.smoke.yaml && test -s outputs/metrics/smoke_metrics.json'
+  'python -m src.pipeline all --config config.smoke.yaml && test -s outputs/smoke/metrics/smoke_metrics.json'
 ~~~
 
 The optional docker-compose profile starts only a local PostgreSQL service for persistence testing:
@@ -131,4 +134,4 @@ The wiki is documentation only. It is not used as input to training, validation,
 - [Behavioral specification](SPEC.md)
 - [C4 architecture and references](docs/C4.md)
 
-The AI conversation export and the short reflection are separate submission artifacts; do not replace the full conversation export with a summary in this repository.
+The full AI conversation export is in [docs/ai_conversation_log.md](docs/ai_conversation_log.md); the short reflection is in [docs/reflection.txt](docs/reflection.txt).

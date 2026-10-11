@@ -2,7 +2,7 @@
 
 ## Model overview
 
-The pipeline compares persistence and seasonal baselines with logistic regression, random forest, and LightGBM. The current full-data metrics snapshot identifies the random forest as the highest-PR-AUC model for the configured 30-minute horizon.
+The pipeline compares persistence and seasonal baselines with logistic regression, random forest, and LightGBM. The current full-data metrics snapshot identifies logistic regression as the highest-PR-AUC model for the configured 30-minute horizon.
 
 ## Intended use
 
@@ -15,8 +15,9 @@ Retrospective research and educational evaluation of short-horizon alert-onset p
 - Grid frequency: five minutes.
 - Train: timestamps before 2023-12-31 00:00 UTC.
 - Validation: 2023-12-31 00:00 through 2024-06-29 23:55 UTC.
-- Test: 2024-06-30 00:00 through 2026-09-05 23:10 UTC in the saved snapshot.
-- Test rows: 229,815; positive rows: 7,542; observed positive rate: 3.28%.
+- Test: 2024-06-30 00:00 through 2026-09-07 05:05 UTC.
+- Test rows: 230,174; positive rows: 7,543; observed positive rate: 3.28%.
+- A 30-minute label embargo removes training/validation rows whose target windows would cross the following split boundary.
 - Thresholds are chosen on validation only. The test period is not used for threshold selection.
 
 ## Full-data holdout metrics
@@ -27,11 +28,11 @@ Metrics are from outputs/metrics/test_metrics.json. Values are rounded.
 |---|---:|---:|---:|---:|---:|---:|
 | Persistence | 0.032 | 0.475 | 0.033 | 1.000 | 0.064 | 0.047 |
 | Seasonal | 0.035 | 0.517 | 0.034 | 0.123 | 0.053 | 0.032 |
-| Logistic regression | 0.077 | 0.627 | 0.033 | 1.000 | 0.064 | 0.118 |
-| Random forest | **0.079** | **0.628** | 0.038 | 0.787 | **0.073** | 0.117 |
-| LightGBM | 0.043 | 0.539 | 0.043 | 0.160 | 0.067 | 0.055 |
+| Logistic regression | **0.103** | **0.722** | **0.125** | 0.417 | **0.193** | 0.181 |
+| Random forest | 0.089 | 0.709 | 0.073 | **0.547** | 0.128 | 0.182 |
+| LightGBM | 0.053 | 0.570 | 0.075 | 0.141 | 0.098 | 0.051 |
 
-The random forest's test PR-AUC is about 2.47 times the persistence baseline's PR-AUC. However, its precision is 3.8%, and its false-positive rate at the chosen threshold is about 66.7%. The lift should not be interpreted as operational readiness.
+Logistic regression's test PR-AUC is about 3.20 times the persistence baseline's PR-AUC. Its precision is 12.5%, with a 9.9% false-positive rate at the validation-selected threshold. This retrospective result does not establish operational readiness.
 
 ## Inputs
 

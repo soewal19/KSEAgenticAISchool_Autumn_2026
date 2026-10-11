@@ -1,8 +1,9 @@
 """Preprocessing: clean raw intervals and expand them into a regular binary series.
 
 The raw dataset contains alert intervals at three administrative levels
-(oblast, raion, hromada). For region-level modelling we keep only
-``level == 'oblast'`` rows, which removes the nested duplication.
+(oblast, raion, hromada). For oblast-level modelling we combine oblast and
+raion rows by their parent ``oblast`` and discard hromada rows. Overlapping
+intervals are later unioned into a binary regional activity series.
 
 Each interval (started_at, finished_at) is expanded into a regular
 time grid at the configured frequency (default 5 minutes). A grid cell
@@ -21,22 +22,22 @@ logger = get_logger("preprocessing")
 
 
 def clean_intervals(df: pd.DataFrame) -> pd.DataFrame:
-    """Clean the raw intervals: filter oblast level, parse times, drop duplicates.
+    """Clean oblast/raion intervals, parse times and remove duplicate events.
 
     Args:
         df: Raw DataFrame with columns oblast, level, started_at, finished_at.
 
     Returns:
-        Cleaned DataFrame with one row per oblast alert interval.
+        Cleaned DataFrame with oblast and raion events assigned to parent oblasts.
     """
     out = df.copy()
-    out = out[out["level"] == "oblast"].copy()
+    out = out[out["level"].isin(["oblast", "raion"])].copy()
     out["started_at"] = pd.to_datetime(out["started_at"], utc=True, errors="coerce")
     out["finished_at"] = pd.to_datetime(out["finished_at"], utc=True, errors="coerce")
     out = out.dropna(subset=["oblast", "started_at", "finished_at"])
     out = out.sort_values(["oblast", "started_at"]).reset_index(drop=True)
     before = len(out)
-    out = out.drop_duplicates(subset=["oblast", "started_at", "finished_at"])
+    out = out.drop_duplicates(subset=["oblast", "level", "started_at", "finished_at"])
     after = len(out)
     logger.info(
         "Cleaned intervals: %d -> %d rows (dropped %d duplicates)",
