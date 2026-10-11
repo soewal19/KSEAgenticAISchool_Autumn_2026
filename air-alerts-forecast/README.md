@@ -112,6 +112,14 @@ CI runs Ruff, pytest, leakage validation, Docker build, and a Docker smoke test 
 
 When DATABASE_URL is absent, the project runs offline and keeps data and dense matrices in local files. When configured, PostgreSQL stores raw events, cleaned intervals, data-quality checks, and experiment metadata; minute-level matrices remain in Parquet. Apply the SQL migrations in order before using a database. See [the architecture and persistence documentation](docs/architecture.md) and the [SQL test seed](sql/seeds/test_seed.sql). Never commit real credentials.
 
+## LLM Wiki
+
+The repository contains a lightweight Markdown-based project wiki. It records research sources, hypotheses, engineering decisions, results, and leakage policy.
+
+The wiki is documentation only. It is not used as input to training, validation, testing, threshold selection, or forecasting.
+
+- [Wiki index](wiki/INDEX.md)
+
 ## Documentation
 
 - [Methodology](docs/methodology.md)
