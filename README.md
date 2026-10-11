@@ -1,26 +1,22 @@
-# KSEAgenticAISchool_Autumn_2026
+# KSE Agentic AI School — Autumn 2026
 
-Агентный исследовательский проект по прогнозированию воздушных тревог в Украине.
+An agentic research project on forecasting air-raid alerts in Ukraine.
 
-## Структура
+## Project structure
 
-- [`air-alerts-forecast/`](air-alerts-forecast) — основной репозиторий проекта:
-  ML-пайплайн прогнозирования вероятности новых воздушных тревог по регионам.
-  Подробное описание, методология, настройка запуска — в
-  [`air-alerts-forecast/README.md`](air-alerts-forecast/README.md).
-- [`air-alerts-forecast/docs/`](air-alerts-forecast/docs) — задание (TASK.md),
-  стек технологий (TECHNOLOGIES.md), архитектура (C4.md).
-- [`air-alerts-forecast/src/`](air-alerts-forecast/src) — исходный код пайплайна.
-- [`air-alerts-forecast/tests/`](air-alerts-forecast/tests) — тесты.
+- [`air-alerts-forecast/`](https://github.com/soewal19/KSEAgenticAISchool_Autumn_2026/tree/main/air-alerts-forecast) — the main project repository, containing an ML pipeline that forecasts the probability of new air-raid alerts by region. See [`air-alerts-forecast/README.md`](https://github.com/soewal19/KSEAgenticAISchool_Autumn_2026/blob/main/air-alerts-forecast/README.md) for the project overview, methodology, and setup instructions.
+- [`air-alerts-forecast/docs/`](https://github.com/soewal19/KSEAgenticAISchool_Autumn_2026/tree/main/air-alerts-forecast/docs) — assignment brief (`TASK.md`), technology stack (`TECHNOLOGIES.md`), and architecture (`C4.md`).
+- [`air-alerts-forecast/src/`](https://github.com/soewal19/KSEAgenticAISchool_Autumn_2026/tree/main/air-alerts-forecast/src) — pipeline source code.
+- [`air-alerts-forecast/tests/`](https://github.com/soewal19/KSEAgenticAISchool_Autumn_2026/tree/main/air-alerts-forecast/tests) — project tests.
 
-## Быстрый старт
+## Quick start
 
-```bash
+~~~bash
 cd air-alerts-forecast
 pip install -r requirements.txt
 python -m src.pipeline all --config config.smoke.yaml
-```
+~~~
 
-## Лицензия
+## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/soewal19/KSEAgenticAISchool_Autumn_2026/blob/main/LICENSE)
